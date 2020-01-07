@@ -1,0 +1,80 @@
+class CNNEncoder(nn.Module):
+   # """docstring for ClassName""" stride=(19,7),
+    def __init__(self):
+        super(CNNEncoder, self).__init__()
+        self.layer1 = nn.Sequential(
+                        nn.Conv2d(1,64,kernel_size=5,stride=(3,1),padding=3),
+                        nn.BatchNorm2d(64, momentum=1, affine=True),
+                        nn.ReLU(),
+                        nn.MaxPool2d(3))  #NX64X250X100   84*102
+        self.layer2 = nn.Sequential(
+                        nn.Conv2d(64,64,kernel_size=3,padding=1),
+                        nn.BatchNorm2d(64, momentum=1, affine=True),
+                        nn.ReLU(),
+                        nn.MaxPool2d(2))  #NX64X125X50   42*51
+        self.layer3 = nn.Sequential(
+                        nn.Conv2d(64,64,kernel_size=3,padding=1),         #42*51
+                        nn.BatchNorm2d(64, momentum=1, affine=True),
+                        nn.ReLU(),
+                        nn.MaxPool2d(2))   #NX64X62X25
+        self.layer4 = nn.Sequential(
+                        nn.Conv2d(64,64,kernel_size=3,padding=1),
+                        nn.BatchNorm2d(64, momentum=1, affine=True),
+                        nn.ReLU())  #NX64X62X25    21*25
+
+    def forward(self,x):
+        out = self.layer1(x)
+        out = self.layer2(out)
+        out = self.layer3(out)
+        out = self.layer4(out)
+        #out = out.view(out.size(0),-1)
+        return out  #NX64X62X25
+
+class RelationNetwork(nn.Module):
+    """docstring for RelationNetwork"""
+    def __init__(self,input_size,hidden_size):
+        super(RelationNetwork, self).__init__()
+        # input:[N*batch, 128, 62, 25]  14*16
+        self.layer1 = nn.Sequential(
+                        nn.Conv2d(128,64,kernel_size=3,padding=1),
+                        nn.BatchNorm2d(64, momentum=1, affine=True),
+                        nn.ReLU(),
+                        nn.MaxPool2d(2))  #[N*batch, 64, 31, 12]  7*8
+        self.layer2 = nn.Sequential(
+                        nn.Conv2d(64,64,kernel_size=3,padding=1),
+                        nn.BatchNorm2d(64, momentum=1, affine=True),
+                        nn.ReLU(),
+                        nn.MaxPool2d(2))  #[N*batch, 64, 15, 6]  3*4
+        self.fc1 = nn.Linear(input_size,hidden_size)
+        self.fc2 = nn.Linear(hidden_size,1) # 1->2
+        #self.relu = nn.ReLU()
+#        self.softmax = nn.Softmax(dim=1)
+
+    def forward(self,x):
+        out = self.layer1(x)
+        out = self.layer2(out)
+        out = out.view(out.size(0),-1)
+        out = F.relu(self.fc1(out))
+        out = torch.sigmoid(self.fc2(out))
+        return out
+        
+#        out = F.relu(self.fc1(out))
+#        out = self.fc2(out)
+#        out = self.softmax(out)  # 5X2
+#        #out = torch.sigmoid(self.fc2(out))
+#        return out[:, 0]  # 5X1
+
+def weights_init(m):
+    classname = m.__class__.__name__
+    if classname.find('Conv') != -1:
+        n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+        m.weight.data.normal_(0, math.sqrt(2. / n))
+        if m.bias is not None:
+            m.bias.data.zero_()
+    elif classname.find('BatchNorm') != -1:
+        m.weight.data.fill_(1)
+        m.bias.data.zero_()
+    elif classname.find('Linear') != -1:
+        n = m.weight.size(1)
+        m.weight.data.normal_(0, 0.01)
+        m.bias.data = torch.ones(m.bias.data.size())
